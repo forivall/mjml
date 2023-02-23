@@ -39,6 +39,7 @@ import { initializeType } from './types/type'
 import handleMjmlConfig, {
   readMjmlConfig,
   handleMjmlConfigComponents,
+  handleMjmlConfigComponentsEsm,
 } from './helpers/mjmlconfig'
 
 const isNode = require('detect-node')
@@ -95,6 +96,71 @@ export default function mjml2html(mjml, options = {}) {
     handleMjmlConfigComponents(packages, componentRootPath, registerComponent)
   }
 
+  // eslint-disable-next-line no-use-before-define
+  return mjml2htmlMain({
+    content,
+    errors,
+    packages,
+    confOptions,
+    mjmlConfigOptions,
+    confPreprocessors,
+    error,
+    componentRootPath,
+  }, mjml, options)
+}
+
+export async function mjml2htmlEsm(mjml, options = {}) {
+  if (isNode && typeof options.skeleton === 'string') {
+    /* eslint-disable global-require */
+    /* eslint-disable import/no-dynamic-require */
+    options.skeleton = await import(options.skeleton.charAt(0) === '.'
+      ? path.resolve(process.cwd(), options.skeleton)
+      : options.skeleton)
+    /* eslint-enable global-require */
+    /* eslint-enable import/no-dynamic-require */
+  }
+
+  let packages = {}
+  let confOptions = {}
+  let mjmlConfigOptions = {}
+  let confPreprocessors = []
+  let error = null
+  let componentRootPath = null
+
+  if ((isNode && options.useMjmlConfigOptions) || options.mjmlConfigPath) {
+    const mjmlConfigContent = readMjmlConfig(options.mjmlConfigPath)
+
+    ;({
+      mjmlConfig: { packages, options: confOptions, preprocessors: confPreprocessors },
+      componentRootPath,
+      error,
+    } = mjmlConfigContent)
+
+    if (options.useMjmlConfigOptions) {
+      mjmlConfigOptions = confOptions
+    }
+  }
+
+  // if mjmlConfigPath is specified then we need to register components it on each call
+  if (isNode && !error && options.mjmlConfigPath) {
+    await handleMjmlConfigComponentsEsm(packages, componentRootPath, registerComponent)
+  }
+
+  // eslint-disable-next-line no-use-before-define
+  return mjml2htmlMain({
+    content: '',
+    errors: [],
+    packages,
+    confOptions,
+    mjmlConfigOptions,
+    confPreprocessors,
+    error,
+    componentRootPath,
+  }, mjml, options)
+}
+function mjml2htmlMain(vars, mjml, options = {}) {
+  let { content, errors } = vars
+  const { mjmlConfigOptions, confPreprocessors } = vars
   const {
     beautify = false,
     fonts = {

@@ -125,6 +125,49 @@ export function handleMjmlConfigComponents(
   return result
 }
 
+export async function handleMjmlConfigComponentsEsm(
+  packages,
+  componentRootPath,
+  registerCompFn,
+) {
+  const result = {
+    success: [],
+    failures: [],
+  }
+
+  await Promise.all(packages.map(async (compPath) => {
+    let resolvedPath = compPath
+    try {
+      resolvedPath = resolveComponentPath(compPath, componentRootPath)
+      if (resolvedPath) {
+        const requiredComp = await import(resolvedPath) // eslint-disable-line global-require, import/no-dynamic-require
+        registerCustomComponent(
+          requiredComp.default || requiredComp,
+          registerCompFn,
+        )
+        registerDependencies(
+          (requiredComp.default || requiredComp).dependencies || {},
+        )
+        result.success.push(compPath)
+      }
+    } catch (e) {
+      result.failures.push({ error: e, compPath })
+      if (e.code === 'ENOENT' || e.code === 'MODULE_NOT_FOUND') {
+        console.error('Missing or unreadable custom component : ', resolvedPath) // eslint-disable-line no-console
+      } else {
+        // eslint-disable-next-line no-console
+        console.error(
+          'Error when registering custom component : ',
+          resolvedPath,
+          e,
+        )
+      }
+    }
+  }))
+
+  return result
+}
+
 export default function handleMjmlConfig(
   configPathOrDir = process.cwd(),
   registerCompFn = registerComponent,
