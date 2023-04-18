@@ -51,49 +51,9 @@ class ValidationError extends Error {
   }
 }
 
-export default function mjml2html(mjml, options = {}) {
+function mjml2htmlMain(mjml, options) {
   let content = ''
   let errors = []
-
-  if (isNode && typeof options.skeleton === 'string') {
-    /* eslint-disable global-require */
-    /* eslint-disable import/no-dynamic-require */
-    options.skeleton = require(options.skeleton.charAt(0) === '.'
-      ? path.resolve(process.cwd(), options.skeleton)
-      : options.skeleton)
-    /* eslint-enable global-require */
-    /* eslint-enable import/no-dynamic-require */
-  }
-
-  let packages = {}
-  let confOptions = {}
-  let mjmlConfigOptions = {}
-  let confPreprocessors = []
-  let error = null
-  let componentRootPath = null
-
-  if ((isNode && options.useMjmlConfigOptions) || options.mjmlConfigPath) {
-    const mjmlConfigContent = readMjmlConfig(options.mjmlConfigPath)
-
-    ;({
-      mjmlConfig: {
-        packages,
-        options: confOptions,
-        preprocessors: confPreprocessors,
-      },
-      componentRootPath,
-      error,
-    } = mjmlConfigContent)
-
-    if (options.useMjmlConfigOptions) {
-      mjmlConfigOptions = confOptions
-    }
-  }
-
-  // if mjmlConfigPath is specified then we need to register components it on each call
-  if (isNode && !error && options.mjmlConfigPath) {
-    handleMjmlConfigComponents(packages, componentRootPath, registerComponent)
-  }
 
   const {
     beautify = false,
@@ -119,13 +79,7 @@ export default function mjml2html(mjml, options = {}) {
     noMigrateWarn = false,
     preprocessors,
     presets = [],
-  } = {
-    ...mjmlConfigOptions,
-    ...options,
-    preprocessors: options.preprocessors
-      ? [...confPreprocessors, ...options.preprocessors]
-      : confPreprocessors,
-  }
+  } = options
 
   const components = { ...globalComponents }
   const dependencies = assignDependencies({}, globalDependencies)
@@ -426,6 +380,114 @@ export default function mjml2html(mjml, options = {}) {
     json: mjml,
     errors,
   }
+}
+
+export default function mjml2html(mjml, options = {}) {
+  if (isNode && typeof options.skeleton === 'string') {
+    /* eslint-disable global-require */
+    /* eslint-disable import/no-dynamic-require */
+    options.skeleton = require(options.skeleton.charAt(0) === '.'
+      ? path.resolve(process.cwd(), options.skeleton)
+      : options.skeleton)
+    /* eslint-enable global-require */
+    /* eslint-enable import/no-dynamic-require */
+  }
+
+  let packages = {}
+  let confOptions = {}
+  let mjmlConfigOptions = {}
+  let confPreprocessors = []
+  let error = null
+  let componentRootPath = null
+
+  if ((isNode && options.useMjmlConfigOptions) || options.mjmlConfigPath) {
+    const mjmlConfigContent = readMjmlConfig(options.mjmlConfigPath)
+
+    ;({
+      mjmlConfig: {
+        packages,
+        options: confOptions,
+        preprocessors: confPreprocessors,
+      },
+      componentRootPath,
+      error,
+    } = mjmlConfigContent)
+
+    if (options.useMjmlConfigOptions) {
+      mjmlConfigOptions = confOptions
+    }
+  }
+
+  // if mjmlConfigPath is specified then we need to register components it on each call
+  if (isNode && !error && options.mjmlConfigPath) {
+    handleMjmlConfigComponents(packages, componentRootPath, registerComponent)
+  }
+
+  return mjml2htmlMain({
+    ...mjmlConfigOptions,
+    ...options,
+    preprocessors: options.preprocessors
+      ? [...confPreprocessors, ...options.preprocessors]
+      : confPreprocessors,
+  })
+}
+
+export async function mjml2htmlAsync(mjml, options = {}) {
+  if (typeof options.skeleton === 'string') {
+    if (options.esm) {
+      options.skeleton = await import(
+        isNode && options.skeleton.charAt(0) === '.'
+          ? path.resolve(process.cwd(), options.skeleton)
+          : options.skeleton
+      )
+    } else if (isNode) {
+      /* eslint-disable global-require */
+      /* eslint-disable import/no-dynamic-require */
+      options.skeleton = require(options.skeleton.charAt(0) === '.'
+        ? path.resolve(process.cwd(), options.skeleton)
+        : options.skeleton)
+      /* eslint-enable global-require */
+      /* eslint-enable import/no-dynamic-require */
+    }
+  }
+
+  let packages = {}
+  let confOptions = {}
+  let mjmlConfigOptions = {}
+  let confPreprocessors = []
+  let error = null
+  let componentRootPath = null
+
+  if ((isNode && options.useMjmlConfigOptions) || options.mjmlConfigPath) {
+    const mjmlConfigContent = readMjmlConfig(options.mjmlConfigPath)
+
+    ;({
+      mjmlConfig: {
+        packages,
+        options: confOptions,
+        preprocessors: confPreprocessors,
+      },
+      componentRootPath,
+      error,
+    } = mjmlConfigContent)
+
+    if (options.useMjmlConfigOptions) {
+      mjmlConfigOptions = confOptions
+    }
+  }
+
+  // if mjmlConfigPath is specified then we need to register components it on each call
+  if (isNode && !error && options.mjmlConfigPath) {
+    handleMjmlConfigComponents(packages, componentRootPath, registerComponent)
+  }
+
+  return mjml2htmlMain({
+    ...mjmlConfigOptions,
+    ...options,
+    preprocessors: options.preprocessors
+      ? [...confPreprocessors, ...options.preprocessors]
+      : confPreprocessors,
+  })
 }
 
 if (isNode) {

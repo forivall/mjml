@@ -2,6 +2,7 @@ module.exports = {
   presets: [['@babel/env', {
     targets: { node: '10' },
     include: ['transform-classes'],
+    exclude: ["proposal-dynamic-import"],
   }]],
   plugins: [
     '@babel/proposal-class-properties',

@@ -4,9 +4,20 @@ import { registerDependencies } from 'mjml-validator'
 
 import { registerComponent } from '../components'
 
-export function readMjmlConfig(configPathOrDir = process.cwd()) {
+export function readMjmlConfig(configPathOrDir = process.cwd(), async = false) {
   let componentRootPath = process.cwd()
   let mjmlConfigPath = configPathOrDir
+  function onFailure(e) {
+    if (e.code !== 'ENOENT') {
+      console.error('Error reading mjmlconfig : ', e) // eslint-disable-line no-console
+    }
+    return {
+      mjmlConfig: { packages: [], options: {} },
+      mjmlConfigPath,
+      componentRootPath,
+      error: e,
+    }
+  }
   try {
     mjmlConfigPath =
       path.basename(configPathOrDir).match(/^\.mjmlconfig(\.js)?$/)
@@ -28,15 +39,7 @@ export function readMjmlConfig(configPathOrDir = process.cwd()) {
 
     return { mjmlConfig, componentRootPath }
   } catch (e) {
-    if (e.code !== 'ENOENT') {
-      console.error('Error reading mjmlconfig : ', e) // eslint-disable-line no-console
-    }
-    return {
-      mjmlConfig: { packages: [], options: {} },
-      mjmlConfigPath,
-      componentRootPath,
-      error: e,
-    }
+    return onFailure(e)
   }
 }
 
@@ -86,28 +89,26 @@ export function handleMjmlConfigComponents(
   packages,
   componentRootPath,
   registerCompFn,
+  loadCompFn,
 ) {
   const result = {
     success: [],
     failures: [],
   }
 
-  packages.forEach((compPath) => {
+  const promises = packages.map((compPath) => {
     let resolvedPath = compPath
-    try {
-      resolvedPath = resolveComponentPath(compPath, componentRootPath)
-      if (resolvedPath) {
-        const requiredComp = require(resolvedPath) // eslint-disable-line global-require, import/no-dynamic-require
-        registerCustomComponent(
-          requiredComp.default || requiredComp,
-          registerCompFn,
-        )
-        registerDependencies(
-          (requiredComp.default || requiredComp).dependencies || {},
-        )
-        result.success.push(compPath)
-      }
-    } catch (e) {
+    function onSuccess(requiredComp) {
+      registerCustomComponent(
+        requiredComp.default || requiredComp,
+        registerCompFn,
+      )
+      registerDependencies(
+        (requiredComp.default || requiredComp).dependencies || {},
+      )
+      result.success.push(compPath)
+    }
+    function onFailure(e) {
       result.failures.push({ error: e, compPath })
       if (e.code === 'ENOENT' || e.code === 'MODULE_NOT_FOUND') {
         console.error('Missing or unreadable custom component : ', resolvedPath) // eslint-disable-line no-console
@@ -120,7 +121,24 @@ export function handleMjmlConfigComponents(
         )
       }
     }
-  })
+    try {
+      resolvedPath = resolveComponentPath(compPath, componentRootPath)
+      if (resolvedPath) {
+        const requiredComp = loadCompFn(resolvedPath)
+        if (typeof requiredComp.then === 'function') {
+          return requiredComp.then(onSuccess, onFailure)
+        }
+        return onSuccess()
+      }
+    } catch (e) {
+      return onFailure(e)
+    }
+    return undefined
+  }).filter(Boolean)
+
+  if (promises) {
+    return Promise.all(promises).then(() => result)
+  }
 
   return result
 }
@@ -128,6 +146,7 @@ export function handleMjmlConfigComponents(
 export default function handleMjmlConfig(
   configPathOrDir = process.cwd(),
   registerCompFn = registerComponent,
+  loadCompFn = require,
 ) {
   const {
     mjmlConfig: { packages },
@@ -136,5 +155,10 @@ export default function handleMjmlConfig(
   } = readMjmlConfig(configPathOrDir)
   if (error) return { error }
 
-  return handleMjmlConfigComponents(packages, componentRootPath, registerCompFn)
+  return handleMjmlConfigComponents(
+    packages,
+    componentRootPath,
+    registerCompFn,
+    loadCompFn,
+  )
 }
